@@ -150,6 +150,12 @@ lazy val macrosAkkaTests = project
   .settings(libraryDependencies ++= Seq(scalatest, tagging, akkaActor))
   .dependsOn(macrosAkka, testUtil)
 
+lazy val scala3 = project
+  .in(file("scala3"))
+  .settings(
+    scalaVersion := "3.0.0-RC3"
+  )
+
 compile in Compile := {
   // Enabling debug project-wide. Can't find a better way to pass options to scalac.
   System.setProperty("macwire.debug", "")
