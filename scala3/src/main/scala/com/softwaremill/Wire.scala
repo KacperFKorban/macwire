@@ -31,16 +31,23 @@ def wireImpl[T: Type](using Quotes): Expr[T] = {
     val paramType = Ref(param).tpe.widen
 
     val ownFields =
-      wiredOwner.memberFields.map { field => FieldEntry(field, Ref(field)) }
+      wiredOwner.declaredFields.map { field => FieldEntry(field, Ref(field)) }
 
     val annotatedModulesFields =
-      wiredOwner.memberFields.map(_.tree)
+      wiredOwner.declaredFields.map(_.tree)
         .collect { case v: ValDef => v }
         .filter(_.tpt.tpe.typeSymbol.annotations.exists(_.tpe.typeSymbol.name.contains("Module")))
         .flatMap(f => f.tpt.tpe.typeSymbol.memberFields.map(field => (field, f.symbol)))
         .map { (field, owner) => FieldEntry(field, Select(Ref(owner), field)) }
     
-    (ownFields ++ annotatedModulesFields).filter(isMatchingField(paramType, _)) match {
+    val parentFields =
+      wiredOwner.tree.asInstanceOf[ClassDef].parents.map(_.symbol).flatMap { cls =>
+        cls.declaredFields.map { field =>
+          FieldEntry(field, Select(Ref(wiredOwner), field))
+        }
+      }
+
+    (ownFields ++ annotatedModulesFields ++ parentFields).filter(isMatchingField(paramType, _)) match {
       case Nil => report.throwError(s"Cannot find value for type: $paramType")
       case l@(first :: second :: _) => report.throwError(s"For type: $paramType, found multiple values: $l")
       case List(fieldEntry) =>
