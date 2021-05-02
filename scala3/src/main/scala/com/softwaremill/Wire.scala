@@ -15,7 +15,7 @@ def wireImpl[T: Type](using Quotes): Expr[T] = {
   val wiredDef = Symbol.spliceOwner.owner
   val wiredOwner = wiredDef.owner
 
-  def isMatchingField(paramType: TypeRepr, fieldEntry: FieldEntry) = {
+  def isMatchingField(paramType: TypeRepr, fieldEntry: FieldEntry): Boolean = {
     if (wiredDef == fieldEntry.field) {
       println(s"  Not checking: ${fieldEntry.field}")
       false
@@ -31,20 +31,16 @@ def wireImpl[T: Type](using Quotes): Expr[T] = {
     val paramType = Ref(param).tpe.widen
 
     val ownFields =
-      wiredOwner.memberFields
+      wiredOwner.memberFields.map { field => FieldEntry(field, Ref(field)) }
+
     val annotatedModulesFields =
       wiredOwner.memberFields.map(_.tree)
         .collect { case v: ValDef => v }
         .filter(_.tpt.tpe.typeSymbol.annotations.exists(_.tpe.typeSymbol.name.contains("Module")))
         .flatMap(f => f.tpt.tpe.typeSymbol.memberFields.map(field => (field, f.symbol)))
+        .map { (field, owner) => FieldEntry(field, Select(Ref(owner), field)) }
     
-    val fieldEntries = ownFields.map { field => FieldEntry(field, Ref(field)) } ++
-      annotatedModulesFields.map { (field, owner) =>
-        val ref = Select(Ref(owner), field)
-        FieldEntry(field, ref)
-      }
-
-    fieldEntries.filter(isMatchingField(paramType, _)) match {
+    (ownFields ++ annotatedModulesFields).filter(isMatchingField(paramType, _)) match {
       case Nil => report.throwError(s"Cannot find value for type: $paramType")
       case l@(first :: second :: _) => report.throwError(s"For type: $paramType, found multiple values: $l")
       case List(fieldEntry) =>
@@ -55,14 +51,4 @@ def wireImpl[T: Type](using Quotes): Expr[T] = {
   val result = Apply(Select(New(TypeIdent(wiredType)), wiredType.primaryConstructor), paramss)
   println(result.show(using Printer.TreeAnsiCode))
   result.asExprOf[T]
-}
-
-inline def inspect[T](t: T) = ${inspectImpl[T]('t)}
-
-def inspectImpl[T: Type](t: Expr[T])(using Quotes): Expr[T] = {
-  import quotes.reflect.*
-
-  println(t.asTerm)
-
-  t
 }
