@@ -2,17 +2,26 @@ package com.softwaremill
 
 case class A()
 case class B()
-case class C(a: A, b: B)
-case class D(a: A, c: C)
+case class C(a: A)
 
 import com.softwaremill.macwire._
 
-object Test extends App {
-  lazy val a = A()
+trait ParentModule {
+  // lazy val a = A()
   lazy val b = B()
-  lazy val c = wire[C]
-  lazy val d = wire[D]
+}
 
-  println(c)
-  println(d)
+@Module
+trait AggregatedModule {
+  lazy val a = A()
+}
+
+trait TestModule(aggregatedModule: AggregatedModule) extends ParentModule {
+  lazy val c = wire[C]
+}
+
+object Test extends App {
+  val m = new TestModule(new AggregatedModule {}) {}
+
+  println(m.c)
 }
